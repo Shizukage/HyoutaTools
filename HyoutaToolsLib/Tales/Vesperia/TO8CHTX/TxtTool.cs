@@ -78,7 +78,7 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 					throw new Exception( "File too small for TO8CHTX header." );
 				}
 
-					string magic = fs.ReadAsciiNullterm();
+				string magic = fs.ReadAsciiNullterm( 8 );
 				if ( magic != "TO8CHTX" ) {
 					throw new Exception( "Not a TO8CHTX file." );
 				}
