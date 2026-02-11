@@ -22,12 +22,13 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 				return -1;
 			}
 
-			DetermineLayout( input, out BitUtils.Bitness bits, out int languageCount );
-			ChatFile c = new ChatFile( input, EndianUtils.Endianness.BigEndian, encoding, bits, languageCount, false );
+			DetermineLayout( input, out EndianUtils.Endianness endian, out BitUtils.Bitness bits, out int languageCount );
+			ChatFile c = new ChatFile( input, endian, encoding, bits, languageCount, false );
 
 			using ( var writer = new StreamWriter( output, false, new UTF8Encoding( false ) ) ) {
 				writer.WriteLine( "# TO8CHTX TXT v2" );
 				writer.WriteLine( "# Encoding=" + encoding );
+				writer.WriteLine( "# AutoDetectedEndian=" + endian );
 				writer.WriteLine( "# AutoDetectedBitness=" + bits );
 				writer.WriteLine( "# AutoDetectedLanguageCount=" + languageCount );
 				writer.WriteLine();
@@ -62,8 +63,8 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 				return -1;
 			}
 
-			DetermineLayout( inputTo8chtx, out BitUtils.Bitness bits, out int languageCount );
-			ChatFile c = new ChatFile( inputTo8chtx, EndianUtils.Endianness.BigEndian, encoding, bits, languageCount, false );
+			DetermineLayout( inputTo8chtx, out EndianUtils.Endianness endian, out BitUtils.Bitness bits, out int languageCount );
+			ChatFile c = new ChatFile( inputTo8chtx, endian, encoding, bits, languageCount, false );
 
 			ApplyTextFile( c, inputTxt );
 			c.RecalculatePointers();
@@ -72,48 +73,67 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 			return 0;
 		}
 
-		private static void DetermineLayout( string path, out BitUtils.Bitness bits, out int languageCount ) {
+		private static void DetermineLayout( string path, out EndianUtils.Endianness endian, out BitUtils.Bitness bits, out int languageCount ) {
 			using ( var fs = new FileStream( path, FileMode.Open, FileAccess.Read ) ) {
 				if ( fs.Length < 0x20 ) {
 					throw new Exception( "File too small for TO8CHTX header." );
 				}
 
-				string magic = fs.ReadAsciiNullterm( 8 );
+				string magic = fs.ReadAsciiNullterm();
 				if ( magic != "TO8CHTX" ) {
 					throw new Exception( "Not a TO8CHTX file." );
 				}
 
-				uint fileSizeInHeader = fs.ReadUInt32().FromEndian( EndianUtils.Endianness.BigEndian );
-				uint lines = fs.ReadUInt32().FromEndian( EndianUtils.Endianness.BigEndian );
-				fs.Position += 4; // unknown
-				uint textStart = fs.ReadUInt32().FromEndian( EndianUtils.Endianness.BigEndian );
-
-				if ( lines == 0 ) {
-					throw new Exception( "TO8CHTX has 0 lines." );
+				if ( TryDetermineLayoutWithEndian( fs, EndianUtils.Endianness.BigEndian, out bits, out languageCount ) ) {
+					endian = EndianUtils.Endianness.BigEndian;
+					return;
 				}
-				if ( textStart < 0x20 ) {
-					throw new Exception( "Invalid TO8CHTX text start." );
+				if ( TryDetermineLayoutWithEndian( fs, EndianUtils.Endianness.LittleEndian, out bits, out languageCount ) ) {
+					endian = EndianUtils.Endianness.LittleEndian;
+					return;
 				}
 
-				long tableSize = (long)textStart - 0x20;
-				if ( tableSize <= 0 || tableSize % lines != 0 ) {
-					throw new Exception( "Could not derive TO8CHTX layout from header/table." );
-				}
-
-				long entrySize = tableSize / lines;
-				if ( TryDecodeLayout( entrySize, BitUtils.Bitness.B64, out languageCount ) ) {
-					bits = BitUtils.Bitness.B64;
-				} else if ( TryDecodeLayout( entrySize, BitUtils.Bitness.B32, out languageCount ) ) {
-					bits = BitUtils.Bitness.B32;
-				} else {
-					throw new Exception( "Could not determine TO8CHTX bitness/language count from entry size." );
-				}
-
-				long headerFileSize = fileSizeInHeader;
-				if ( headerFileSize > 0 && headerFileSize > fs.Length ) {
-					throw new Exception( "TO8CHTX header filesize is larger than actual file." );
-				}
+				throw new Exception( "Could not derive TO8CHTX layout from header/table for either big-endian or little-endian." );
 			}
+		}
+
+		private static bool TryDetermineLayoutWithEndian( FileStream fs, EndianUtils.Endianness endian, out BitUtils.Bitness bits, out int languageCount ) {
+			bits = BitUtils.Bitness.B32;
+			languageCount = 0;
+
+			fs.Position = 8;
+			uint fileSizeInHeader = fs.ReadUInt32().FromEndian( endian );
+			uint lines = fs.ReadUInt32().FromEndian( endian );
+				fs.Position += 4; // unknown
+			uint textStart = fs.ReadUInt32().FromEndian( endian );
+
+			if ( lines == 0 ) {
+				return false;
+			}
+			if ( textStart < 0x20 || textStart > fs.Length ) {
+				return false;
+			}
+
+			long tableSize = (long)textStart - 0x20;
+			if ( tableSize <= 0 || tableSize % lines != 0 ) {
+				return false;
+			}
+
+			long entrySize = tableSize / lines;
+			if ( TryDecodeLayout( entrySize, BitUtils.Bitness.B64, out languageCount ) ) {
+				bits = BitUtils.Bitness.B64;
+			} else if ( TryDecodeLayout( entrySize, BitUtils.Bitness.B32, out languageCount ) ) {
+				bits = BitUtils.Bitness.B32;
+			} else {
+				return false;
+			}
+
+			long headerFileSize = fileSizeInHeader;
+			if ( headerFileSize > 0 && headerFileSize > fs.Length ) {
+				return false;
+			}
+
+			return true;
 		}
 
 		private static bool TryDecodeLayout( long entrySize, BitUtils.Bitness bits, out int languageCount ) {
