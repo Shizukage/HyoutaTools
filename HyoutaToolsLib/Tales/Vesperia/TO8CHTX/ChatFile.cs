@@ -40,17 +40,27 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 		public ChatFileHeader Header;
 		public ChatFileLine[] Lines;
 
-		public ChatFile( string filename, EndianUtils.Endianness endian, TextUtils.GameTextEncoding encoding, BitUtils.Bitness bits, int languageCount ) {
+		private EndianUtils.Endianness Endian;
+		private TextUtils.GameTextEncoding Encoding;
+		private BitUtils.Bitness Bits;
+		private bool ReplaceAtWithSpace;
+
+		public ChatFile( string filename, EndianUtils.Endianness endian, TextUtils.GameTextEncoding encoding, BitUtils.Bitness bits, int languageCount, bool replaceAtWithSpace = true ) {
 			using ( Stream stream = new FileStream( filename, FileMode.Open, FileAccess.Read ) ) {
-				LoadFile( stream, endian, encoding, bits, languageCount );
+				LoadFile( stream, endian, encoding, bits, languageCount, replaceAtWithSpace );
 			}
 		}
 
-		public ChatFile( Stream file, EndianUtils.Endianness endian, TextUtils.GameTextEncoding encoding, BitUtils.Bitness bits, int languageCount ) {
-			LoadFile( file, endian, encoding, bits, languageCount );
+		public ChatFile( Stream file, EndianUtils.Endianness endian, TextUtils.GameTextEncoding encoding, BitUtils.Bitness bits, int languageCount, bool replaceAtWithSpace = true ) {
+			LoadFile( file, endian, encoding, bits, languageCount, replaceAtWithSpace );
 		}
 
-		private void LoadFile( Stream TO8CHTX, EndianUtils.Endianness endian, TextUtils.GameTextEncoding encoding, BitUtils.Bitness bits, int languageCount ) {
+		private void LoadFile( Stream TO8CHTX, EndianUtils.Endianness endian, TextUtils.GameTextEncoding encoding, BitUtils.Bitness bits, int languageCount, bool replaceAtWithSpace ) {
+			Endian = endian;
+			Encoding = encoding;
+			Bits = bits;
+			ReplaceAtWithSpace = replaceAtWithSpace;
+
 			Header = new ChatFileHeader();
 
 			ulong pos = (ulong)TO8CHTX.Position;
@@ -77,7 +87,8 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 				Lines[i].SName = TO8CHTX.ReadNulltermStringFromLocationAndReset( (long)( pos + Lines[i].NamePointer + Header.TextStart ), encoding );
 				Lines[i].STexts = new string[languageCount];
 				for ( int j = 0; j < languageCount; ++j ) {
-					Lines[i].STexts[j] = TO8CHTX.ReadNulltermStringFromLocationAndReset( (long)( pos + Lines[i].TextPointers[j] + Header.TextStart ), encoding ).Replace( '@', ' ' );
+					string text = TO8CHTX.ReadNulltermStringFromLocationAndReset( (long)( pos + Lines[i].TextPointers[j] + Header.TextStart ), encoding );
+					Lines[i].STexts[j] = ReplaceAtWithSpace ? text.Replace( '@', ' ' ) : text;
 				}
 			}
 		}
@@ -120,27 +131,30 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 		public byte[] Serialize() {
 			List<byte> Serialized = new List<byte>( (int)Header.Filesize );
 
-			Serialized.AddRange( System.BitConverter.GetBytes( EndianUtils.SwapEndian( Header.Identify ) ) );
-			Serialized.AddRange( System.BitConverter.GetBytes( EndianUtils.SwapEndian( Header.Filesize ) ) );
-			Serialized.AddRange( System.BitConverter.GetBytes( EndianUtils.SwapEndian( Header.Lines ) ) );
-			Serialized.AddRange( System.BitConverter.GetBytes( EndianUtils.SwapEndian( Header.Unknown ) ) );
-			Serialized.AddRange( System.BitConverter.GetBytes( EndianUtils.SwapEndian( Header.TextStart ) ) );
-			Serialized.AddRange( System.BitConverter.GetBytes( EndianUtils.SwapEndian( Header.Empty ) ) );
+			Serialized.AddRange( SerializeUInt64( Header.Identify ) );
+			Serialized.AddRange( SerializeUInt32( Header.Filesize ) );
+			Serialized.AddRange( SerializeUInt32( Header.Lines ) );
+			Serialized.AddRange( SerializeUInt32( Header.Unknown ) );
+			Serialized.AddRange( SerializeUInt32( Header.TextStart ) );
+			Serialized.AddRange( SerializeUInt64( Header.Empty ) );
 
 			foreach ( ChatFileLine Line in Lines ) {
-				Serialized.AddRange( System.BitConverter.GetBytes( EndianUtils.SwapEndian( (uint)Line.NamePointer ) ) );
-				Serialized.AddRange( System.BitConverter.GetBytes( EndianUtils.SwapEndian( (uint)Line.ENG ) ) );
-				Serialized.AddRange( System.BitConverter.GetBytes( EndianUtils.SwapEndian( (uint)Line.ENG ) ) );
-				Serialized.AddRange( System.BitConverter.GetBytes( EndianUtils.SwapEndian( Line.Unknown ) ) );
+				Serialized.AddRange( SerializeUInt( Line.NamePointer ) );
+				for ( int i = 0; i < Line.TextPointers.Length; ++i ) {
+					Serialized.AddRange( SerializeUInt( Line.TextPointers[i] ) );
+				}
+				Serialized.AddRange( SerializeUInt32( Line.Unknown ) );
 			}
 
 			byte ByteNull = 0x00;
 
 			foreach ( ChatFileLine Line in Lines ) {
-				Serialized.AddRange( TextUtils.StringToBytesShiftJis( Line.SName ) );
+				Serialized.AddRange( StringToBytes( Line.SName ) );
 				Serialized.Add( ByteNull );
-				Serialized.AddRange( TextUtils.StringToBytesShiftJis( Line.SENG ) );
-				Serialized.Add( ByteNull );
+				for ( int i = 0; i < Line.STexts.Length; ++i ) {
+					Serialized.AddRange( StringToBytes( Line.STexts[i] ) );
+					Serialized.Add( ByteNull );
+				}
 			}
 
 			return Serialized.ToArray();
@@ -150,15 +164,52 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 			uint Size = Header.TextStart;
 			for ( int i = 0; i < Lines.Length; i++ ) {
 				Lines[i].NamePointer = Size - Header.TextStart;
-				Size += (uint)TextUtils.StringToBytesShiftJis( Lines[i].SName ).Length;
+				Size += (uint)StringToBytes( Lines[i].SName ).Length;
 				Size++;
-				Lines[i].JPN = Size - Header.TextStart;
-				Lines[i].ENG = Size - Header.TextStart;
-				Size += (uint)TextUtils.StringToBytesShiftJis( Lines[i].SENG ).Length;
-				Size++;
+				for ( int j = 0; j < Lines[i].TextPointers.Length; ++j ) {
+					Lines[i].TextPointers[j] = Size - Header.TextStart;
+					Size += (uint)StringToBytes( Lines[i].STexts[j] ).Length;
+					Size++;
+				}
 			}
 
 			Header.Filesize = Size;
+		}
+
+		private byte[] StringToBytes( string s ) {
+			if ( s == null ) {
+				s = string.Empty;
+			}
+
+			switch ( Encoding ) {
+				case TextUtils.GameTextEncoding.ShiftJIS:
+					return TextUtils.StringToBytesShiftJis( s );
+				case TextUtils.GameTextEncoding.UTF8:
+					return System.Text.Encoding.UTF8.GetBytes( s );
+				case TextUtils.GameTextEncoding.ASCII:
+					return System.Text.Encoding.ASCII.GetBytes( s );
+				default:
+					throw new Exception( "Unsupported encoding for TO8CHTX serialization: " + Encoding );
+			}
+		}
+
+		private byte[] SerializeUInt( ulong value ) {
+			switch ( Bits ) {
+				case BitUtils.Bitness.B64:
+					return SerializeUInt64( value );
+				case BitUtils.Bitness.B32:
+					return SerializeUInt32( (uint)value );
+				default:
+					throw new Exception( "Unsupported bitness for TO8CHTX serialization: " + Bits );
+			}
+		}
+
+		private byte[] SerializeUInt32( uint value ) {
+			return System.BitConverter.GetBytes( Endian == EndianUtils.Endianness.BigEndian ? EndianUtils.SwapEndian( value ) : value );
+		}
+
+		private byte[] SerializeUInt64( ulong value ) {
+			return System.BitConverter.GetBytes( Endian == EndianUtils.Endianness.BigEndian ? EndianUtils.SwapEndian( value ) : value );
 		}
 	}
 }
