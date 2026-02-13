@@ -32,6 +32,8 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 				writer.WriteLine( "# AutoDetectedBitness=" + bits );
 				writer.WriteLine( "# AutoDetectedLanguageCount=" + languageCount );
 				writer.WriteLine();
+				WriteBlock( writer, "PREFIX", c.GetUnreferencedPrefixString() );
+				writer.WriteLine();
 
 				for ( int i = 0; i < c.Lines.Length; ++i ) {
 					var line = c.Lines[i];
@@ -159,7 +161,7 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 			StringBuilder sb = new StringBuilder();
 
 			Action flushBlock = () => {
-				if ( currentLineIndex < 0 || currentBlock == null ) {
+				if ( currentBlock == null ) {
 					return;
 				}
 				if ( currentLineIndex >= c.Lines.Length ) {
@@ -167,7 +169,11 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 				}
 
 				string text = sb.ToString();
-				if ( currentBlock == "NAME" ) {
+				if ( currentLineIndex < 0 && currentBlock == "PREFIX" ) {
+					c.SetUnreferencedPrefixString( text );
+				} else if ( currentLineIndex < 0 ) {
+					throw new Exception( "Block [" + currentBlock + "] appears before any line header. Only [PREFIX] is allowed there." );
+				} else if ( currentBlock == "NAME" ) {
 					c.Lines[currentLineIndex].SName = text;
 				} else {
 					if ( currentBlock.Length < 2 || currentBlock[0] != 'L' ) {

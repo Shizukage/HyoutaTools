@@ -39,6 +39,7 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 	public class ChatFile {
 		public ChatFileHeader Header;
 		public ChatFileLine[] Lines;
+		public byte[] UnreferencedPrefixBytes = new byte[0];
 
 		private EndianUtils.Endianness Endian;
 		private TextUtils.GameTextEncoding Encoding;
@@ -90,6 +91,25 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 					string text = TO8CHTX.ReadNulltermStringFromLocationAndReset( (long)( pos + Lines[i].TextPointers[j] + Header.TextStart ), encoding );
 					Lines[i].STexts[j] = ReplaceAtWithSpace ? text.Replace( '@', ' ' ) : text;
 				}
+			}
+
+			ulong minPointer = ulong.MaxValue;
+			for ( int i = 0; i < Lines.Length; ++i ) {
+				if ( Lines[i].NamePointer < minPointer ) {
+					minPointer = Lines[i].NamePointer;
+				}
+				for ( int j = 0; j < Lines[i].TextPointers.Length; ++j ) {
+					if ( Lines[i].TextPointers[j] < minPointer ) {
+						minPointer = Lines[i].TextPointers[j];
+					}
+				}
+			}
+
+			if ( minPointer > 0 && minPointer < int.MaxValue ) {
+				TO8CHTX.Position = (long)( pos + Header.TextStart );
+				UnreferencedPrefixBytes = TO8CHTX.ReadBytes( (int)minPointer );
+			} else {
+				UnreferencedPrefixBytes = new byte[0];
 			}
 		}
 
@@ -148,6 +168,8 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 
 			byte ByteNull = 0x00;
 
+			Serialized.AddRange( UnreferencedPrefixBytes );
+
 			foreach ( ChatFileLine Line in Lines ) {
 				Serialized.AddRange( StringToBytes( Line.SName ) );
 				Serialized.Add( ByteNull );
@@ -161,7 +183,7 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 		}
 
 		public void RecalculatePointers() {
-			uint Size = Header.TextStart;
+			uint Size = Header.TextStart + (uint)UnreferencedPrefixBytes.Length;
 			for ( int i = 0; i < Lines.Length; i++ ) {
 				Lines[i].NamePointer = Size - Header.TextStart;
 				Size += (uint)StringToBytes( Lines[i].SName ).Length;
@@ -174,6 +196,39 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 			}
 
 			Header.Filesize = Size;
+		}
+
+		public string GetUnreferencedPrefixString() {
+			if ( UnreferencedPrefixBytes == null || UnreferencedPrefixBytes.Length == 0 ) {
+				return string.Empty;
+			}
+
+			int len = UnreferencedPrefixBytes.Length;
+			if ( UnreferencedPrefixBytes[len - 1] == 0 ) {
+				len -= 1;
+			}
+
+			switch ( Encoding ) {
+				case TextUtils.GameTextEncoding.ShiftJIS:
+					return System.Text.Encoding.GetEncoding( "shift_jis" ).GetString( UnreferencedPrefixBytes, 0, len );
+				case TextUtils.GameTextEncoding.UTF8:
+					return System.Text.Encoding.UTF8.GetString( UnreferencedPrefixBytes, 0, len );
+				case TextUtils.GameTextEncoding.ASCII:
+					return System.Text.Encoding.ASCII.GetString( UnreferencedPrefixBytes, 0, len );
+				default:
+					throw new Exception( "Unsupported encoding for TO8CHTX prefix decoding: " + Encoding );
+			}
+		}
+
+		public void SetUnreferencedPrefixString( string s ) {
+			if ( s == null ) {
+				s = string.Empty;
+			}
+
+			byte[] b = StringToBytes( s );
+			UnreferencedPrefixBytes = new byte[b.Length + 1];
+			Array.Copy( b, UnreferencedPrefixBytes, b.Length );
+			UnreferencedPrefixBytes[UnreferencedPrefixBytes.Length - 1] = 0;
 		}
 
 		private byte[] StringToBytes( string s ) {
