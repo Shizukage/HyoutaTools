@@ -39,8 +39,16 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 					var line = c.Lines[i];
 					writer.WriteLine( "=== LINE " + i + " ===" );
 					WriteBlock( writer, "NAME", line.SName );
+
+					List<int> languageIndicesByBlobOrder = new List<int>( line.STexts.Length );
 					for ( int lang = 0; lang < line.STexts.Length; ++lang ) {
-						WriteBlock( writer, string.Format( "L{0:D2}", lang ), line.STexts[lang] );
+						languageIndicesByBlobOrder.Add( lang );
+					}
+					languageIndicesByBlobOrder.Sort( ( a, b ) => line.TextPointers[a].CompareTo( line.TextPointers[b] ) );
+
+					for ( int orderIndex = 0; orderIndex < languageIndicesByBlobOrder.Count; ++orderIndex ) {
+						int languageIndex = languageIndicesByBlobOrder[orderIndex];
+						WriteBlock( writer, string.Format( "L{0:D2}", languageIndex ), line.STexts[languageIndex] );
 					}
 					writer.WriteLine();
 				}
