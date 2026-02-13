@@ -40,15 +40,9 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 					writer.WriteLine( "=== LINE " + i + " ===" );
 					WriteBlock( writer, "NAME", line.SName );
 
-					List<int> languageIndicesByBlobOrder = new List<int>( line.STexts.Length );
-					for ( int lang = 0; lang < line.STexts.Length; ++lang ) {
-						languageIndicesByBlobOrder.Add( lang );
-					}
-					languageIndicesByBlobOrder.Sort( ( a, b ) => line.TextPointers[a].CompareTo( line.TextPointers[b] ) );
-
-					for ( int orderIndex = 0; orderIndex < languageIndicesByBlobOrder.Count; ++orderIndex ) {
-						int languageIndex = languageIndicesByBlobOrder[orderIndex];
-						WriteBlock( writer, string.Format( "L{0:D2}", languageIndex ), line.STexts[languageIndex] );
+					for ( int languageOrderIndex = 0; languageOrderIndex < line.STexts.Length; ++languageOrderIndex ) {
+						int languageIndex = GetLanguageIndexForBlobOrder( line, languageOrderIndex );
+						WriteBlock( writer, string.Format( "L{0:D2}", languageOrderIndex ), line.STexts[languageIndex] );
 					}
 					writer.WriteLine();
 				}
@@ -187,12 +181,14 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 					if ( currentBlock.Length < 2 || currentBlock[0] != 'L' ) {
 						throw new Exception( "Unknown block [" + currentBlock + "] on line " + currentLineIndex + "." );
 					}
-					if ( !int.TryParse( currentBlock.Substring( 1 ), out int languageIndex ) ) {
+					if ( !int.TryParse( currentBlock.Substring( 1 ), out int languageOrderIndex ) ) {
 						throw new Exception( "Invalid language block [" + currentBlock + "] on line " + currentLineIndex + "." );
 					}
-					if ( languageIndex < 0 || languageIndex >= c.Lines[currentLineIndex].STexts.Length ) {
+					if ( languageOrderIndex < 0 || languageOrderIndex >= c.Lines[currentLineIndex].STexts.Length ) {
 						throw new Exception( "Language index out of range in block [" + currentBlock + "] on line " + currentLineIndex + "." );
 					}
+
+					int languageIndex = GetLanguageIndexForBlobOrder( c.Lines[currentLineIndex], languageOrderIndex );
 					c.Lines[currentLineIndex].STexts[languageIndex] = text;
 				}
 			};
@@ -242,6 +238,15 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 				writer.WriteLine( value.Replace( "\r\n", "\n" ).Replace( "\r", "\n" ) );
 			}
 			writer.WriteLine( "[/" + label + "]" );
+		}
+
+		private static int GetLanguageIndexForBlobOrder( ChatFileLine line, int languageOrderIndex ) {
+			List<int> languageIndicesByBlobOrder = new List<int>( line.STexts.Length );
+			for ( int lang = 0; lang < line.STexts.Length; ++lang ) {
+				languageIndicesByBlobOrder.Add( lang );
+			}
+			languageIndicesByBlobOrder.Sort( ( a, b ) => line.TextPointers[a].CompareTo( line.TextPointers[b] ) );
+			return languageIndicesByBlobOrder[languageOrderIndex];
 		}
 
 		private static bool TryParseEncoding( string encodingString, out TextUtils.GameTextEncoding encoding ) {
