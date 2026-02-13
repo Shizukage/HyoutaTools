@@ -39,6 +39,8 @@ namespace HyoutaTools {
 			{ new KeyValuePair<ProgramName, ExecuteProgramDelegate>( new ProgramName( "GraceNote.Vesperia.StringDicImport",      "GNToVdicim"  ),  GraceNote.Vesperia.StringDicImport.Importer.Execute) },
 			{ new KeyValuePair<ProgramName, ExecuteProgramDelegate>( new ProgramName( "GraceNote.Vesperia.TO8CHTXExport",        "GNToVchatex" ),  GraceNote.Vesperia.TO8CHTXExport.Program.Execute) },
 			{ new KeyValuePair<ProgramName, ExecuteProgramDelegate>( new ProgramName( "GraceNote.Vesperia.TO8CHTXImport",        "GNToVchatim" ),  GraceNote.Vesperia.TO8CHTXImport.Program.Execute) },
+			{ new KeyValuePair<ProgramName, ExecuteProgramDelegate>( new ProgramName( "Tales.Vesperia.TO8CHTX.TxtExtract",      "ToVchtxtxtE" ),  Tales.Vesperia.TO8CHTX.TxtTool.ExecuteExtract) },
+			{ new KeyValuePair<ProgramName, ExecuteProgramDelegate>( new ProgramName( "Tales.Vesperia.TO8CHTX.TxtPack",         "ToVchtxtxtP" ),  Tales.Vesperia.TO8CHTX.TxtTool.ExecutePack) },
 			{ new KeyValuePair<ProgramName, ExecuteProgramDelegate>( new ProgramName( "GraceNote.Vesperia.VVoicesGenerate",      "-"           ),  GraceNote.Vesperia.VVoicesGenerate.Program.Execute) },
 			{ new KeyValuePair<ProgramName, ExecuteProgramDelegate>( new ProgramName( "GraceNote.XilliaScriptFileDump",          "-"           ),  GraceNote.XilliaScriptFileDump.Program.Execute) },
 			{ new KeyValuePair<ProgramName, ExecuteProgramDelegate>( new ProgramName( "Other.AutoExtract",                       "autoex"      ),  Other.AutoExtract.Program.Execute) },
