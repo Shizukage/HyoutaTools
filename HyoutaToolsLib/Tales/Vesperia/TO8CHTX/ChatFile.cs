@@ -173,8 +173,10 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 			foreach ( ChatFileLine Line in Lines ) {
 				Serialized.AddRange( StringToBytes( Line.SName ) );
 				Serialized.Add( ByteNull );
-				for ( int i = 0; i < Line.STexts.Length; ++i ) {
-					Serialized.AddRange( StringToBytes( Line.STexts[i] ) );
+				int[] languageIndicesByPointerOrder = GetLanguageIndicesByPointerOrder( Line.TextPointers );
+				for ( int i = 0; i < languageIndicesByPointerOrder.Length; ++i ) {
+					int languageIndex = languageIndicesByPointerOrder[i];
+					Serialized.AddRange( StringToBytes( Line.STexts[languageIndex] ) );
 					Serialized.Add( ByteNull );
 				}
 			}
@@ -188,9 +190,11 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 				Lines[i].NamePointer = Size - Header.TextStart;
 				Size += (uint)StringToBytes( Lines[i].SName ).Length;
 				Size++;
-				for ( int j = 0; j < Lines[i].TextPointers.Length; ++j ) {
-					Lines[i].TextPointers[j] = Size - Header.TextStart;
-					Size += (uint)StringToBytes( Lines[i].STexts[j] ).Length;
+				int[] languageIndicesByPointerOrder = GetLanguageIndicesByPointerOrder( Lines[i].TextPointers );
+				for ( int j = 0; j < languageIndicesByPointerOrder.Length; ++j ) {
+					int languageIndex = languageIndicesByPointerOrder[j];
+					Lines[i].TextPointers[languageIndex] = Size - Header.TextStart;
+					Size += (uint)StringToBytes( Lines[i].STexts[languageIndex] ).Length;
 					Size++;
 				}
 			}
@@ -246,6 +250,16 @@ namespace HyoutaTools.Tales.Vesperia.TO8CHTX {
 				default:
 					throw new Exception( "Unsupported encoding for TO8CHTX serialization: " + Encoding );
 			}
+		}
+
+		private static int[] GetLanguageIndicesByPointerOrder( ulong[] textPointers ) {
+			int[] indices = new int[textPointers.Length];
+			for ( int i = 0; i < indices.Length; ++i ) {
+				indices[i] = i;
+			}
+
+			Array.Sort( indices, ( a, b ) => textPointers[a].CompareTo( textPointers[b] ) );
+			return indices;
 		}
 
 		private byte[] SerializeUInt( ulong value ) {
